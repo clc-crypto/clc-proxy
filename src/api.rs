@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
+use axum_server::tls_rustls::RustlsConfig;
+use std::net::SocketAddr;
 
 use crate::proxy;
 
@@ -63,7 +65,7 @@ struct AppState {
 
 pub async fn api() {
     let state = Arc::new(AppState {
-        proxies: vec![String::from("127.0.0.1:6160")]
+        proxies: vec![String::from("174.138.101.187:6061")]
     });
 
     // Create a CORS layer that allows all origins, methods, and headers
@@ -72,12 +74,20 @@ pub async fn api() {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let config = RustlsConfig::from_pem_file(
+        "/etc/letsencrypt/live/clc.ix.tc/cert.pem",
+        "/etc/letsencrypt/live/clc.ix.tc/privkey.pem"
+    ).await.unwrap();
+
     // Build our application with two routes, one for GET and one for POST
     let app = Router::new()
         .route("/{*path}", get(handle_get).post(handle_post))
         .with_state(state)
         .layer(cors);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+        let addr = SocketAddr::from(([127, 0, 0, 1], 7070));
+    axum_server::bind_rustls(addr, config)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }
