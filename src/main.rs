@@ -3,5 +3,5 @@ mod proxy;
 
 #[tokio::main]
 async fn main() {
-    api::api().await;
+    api::api(false).await;
 }

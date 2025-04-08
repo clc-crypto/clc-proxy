@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use tokio::io::AsyncWriteExt;
-use tokio::io::AsyncReadExt;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use tokio::time::timeout;
+use tokio::io::{BufReader, AsyncBufReadExt};
 
 async fn send_large_data(stream: &mut tokio::net::TcpStream, data: &[u8]) -> std::io::Result<()> {
     let chunk_size = 1024; // 1 KB chunk size
@@ -23,22 +23,11 @@ async fn send_large_data(stream: &mut tokio::net::TcpStream, data: &[u8]) -> std
 }
 
 async fn receive_large_data(stream: &mut tokio::net::TcpStream) -> std::io::Result<Vec<u8>> {
-    let mut buffer = Vec::new();
-    let mut chunk = vec![0; 1024]; // Buffer to read in chunks
-
-    loop {
-        let bytes_read = stream.read(&mut chunk).await?;
-        if bytes_read == 0 {
-            // No more data to read
-            break;
-        }
-        buffer.extend_from_slice(&chunk[..bytes_read]);
-        if bytes_read < 1024 {
-            break; // End of data, since we've received fewer bytes than a full chunk
-        }
-    }
-
-    Ok(buffer)
+    let mut reader = BufReader::new(stream);
+    let mut buf = Vec::new();
+    reader.read_until(0x1e, &mut buf).await?;
+    buf.pop(); // Remove the delimiter
+    Ok(buf)
 }
 
 pub async fn distribute_proxy(request: &str, result: &mut String, proxies: &Vec<String>) {

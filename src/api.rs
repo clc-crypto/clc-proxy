@@ -11,6 +11,7 @@ use tower_http::cors::{CorsLayer, Any};
 use std::sync::Arc;
 use axum_server::tls_rustls::RustlsConfig;
 use std::net::SocketAddr;
+use axum_server::Server;
 
 use crate::proxy;
 
@@ -63,9 +64,9 @@ struct AppState {
     proxies: Vec<String>
 }
 
-pub async fn api() {
+pub async fn api(use_https: bool) {
     let state = Arc::new(AppState {
-        proxies: vec![String::from("174.138.101.187:6061")]
+        proxies: vec![String::from("127.0.0.1:6061")]
     });
 
     // Create a CORS layer that allows all origins, methods, and headers
@@ -74,20 +75,28 @@ pub async fn api() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let config = RustlsConfig::from_pem_file(
-        "/etc/letsencrypt/live/clc.ix.tc/cert.pem",
-        "/etc/letsencrypt/live/clc.ix.tc/privkey.pem"
-    ).await.unwrap();
-
     // Build our application with two routes, one for GET and one for POST
     let app = Router::new()
         .route("/{*path}", get(handle_get).post(handle_post))
         .with_state(state)
         .layer(cors);
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], 7070));
-    axum_server::bind_rustls(addr, config)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let addr = SocketAddr::from(([0, 0, 0, 0], 7070));
+
+    if use_https {
+        let config = RustlsConfig::from_pem_file(
+            "/etc/letsencrypt/live/clc.ix.tc/cert.pem",
+            "/etc/letsencrypt/live/clc.ix.tc/privkey.pem"
+        ).await.unwrap();
+
+        axum_server::bind_rustls(addr, config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    } else {
+        Server::bind(addr)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    }
 }
